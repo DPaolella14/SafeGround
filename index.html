@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SafeGround — Live Earthquake &amp; Disaster Tracker</title>
+  <meta name="description" content="SafeGround tracks earthquakes (USGS) and weather/disaster alerts (NOAA National Weather Service) in real time, alerts you about your home and saved areas, and keeps your preparedness checklist.">
+  <meta name="theme-color" content="#0b0f17">
+  <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="SafeGround home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M16 3 4 8v7c0 7.2 5 12.6 12 14 7-1.4 12-6.8 12-14V8L16 3Z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M8 17h4l2-5 3 9 2-4h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Safe<b>Ground</b></span>
+    </a>
+
+    <div class="live" id="liveStatus" data-state="connecting" title="Data refreshes automatically">
+      <span class="pulse-dot" aria-hidden="true"></span>
+      <span class="live-label" id="liveLabel">CONNECTING</span>
+      <span class="live-ago" id="updatedAgo">fetching latest data…</span>
+    </div>
+
+    <div class="top-actions">
+      <button class="icon-btn refresh-btn" id="refreshBtn" type="button" title="Refresh now" aria-label="Refresh now">
+        <svg viewBox="0 0 36 36" class="countdown" aria-hidden="true">
+          <circle cx="18" cy="18" r="15" class="cd-track"/>
+          <circle cx="18" cy="18" r="15" class="cd-fill" id="countdownRing"/>
+        </svg>
+        <span class="cd-text" id="countdownText">60</span>
+      </button>
+      <button class="chip-btn" id="unitsBtn" type="button" title="Toggle distance units">km</button>
+      <button class="icon-btn" id="themeBtn" type="button" title="Toggle light/dark" aria-label="Toggle light or dark theme">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" fill="currentColor"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="error-banner" id="errorBanner" role="alert" hidden>
+    <span id="errorText">Couldn’t reach the data feeds.</span>
+    <button type="button" id="errorRetry">Retry</button>
+  </div>
+
+  <main class="layout">
+    <div class="map-wrap">
+      <div id="map" aria-label="Map of earthquakes and alerts"></div>
+
+      <div class="stats" id="stats">
+        <div class="stat"><span class="stat-label">Quakes · 24h</span><span class="stat-value" id="statCount">–</span><span class="stat-sub" id="statCountSub">&nbsp;</span></div>
+        <div class="stat"><span class="stat-label">Largest · 24h</span><span class="stat-value" id="statMax">–</span><span class="stat-sub" id="statMaxSub">&nbsp;</span></div>
+        <div class="stat"><span class="stat-label">Nearest to home</span><span class="stat-value" id="statNear">–</span><span class="stat-sub" id="statNearSub">Set a home location</span></div>
+        <div class="stat"><span class="stat-label">NWS alerts</span><span class="stat-value" id="statNws">–</span><span class="stat-sub" id="statNwsSub">&nbsp;</span></div>
+      </div>
+
+      <div class="legend" id="legend">
+        <div class="legend-title">Magnitude</div>
+        <div class="legend-row">
+          <span><i style="--c:var(--m1)"></i>&lt;2</span>
+          <span><i style="--c:var(--m2)"></i>2</span>
+          <span><i style="--c:var(--m3)"></i>3</span>
+          <span><i style="--c:var(--m4)"></i>4</span>
+          <span><i style="--c:var(--m5)"></i>5</span>
+          <span><i style="--c:var(--m6)"></i>6+</span>
+        </div>
+        <label class="legend-toggle"><input type="checkbox" id="toggleNws" checked> NWS alert areas</label>
+      </div>
+
+      <div class="pick-banner" id="pickBanner" hidden>
+        <span id="pickText">Click the map to choose a location</span>
+        <button type="button" id="pickCancel">Cancel</button>
+      </div>
+
+      <article class="detail" id="detail" hidden aria-live="polite"></article>
+    </div>
+
+    <aside class="panel" aria-label="SafeGround controls">
+      <nav class="tabs" role="tablist">
+        <button role="tab" class="tab active" data-tab="live" aria-selected="true" id="tabbtn-live">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Live
+        </button>
+        <button role="tab" class="tab" data-tab="alerts" aria-selected="false" id="tabbtn-alerts">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2Zm4 4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Alerts<span class="badge" id="alertBadge" hidden>0</span>
+        </button>
+        <button role="tab" class="tab" data-tab="places" aria-selected="false" id="tabbtn-places">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="2.5" fill="currentColor"/></svg>Places
+        </button>
+        <button role="tab" class="tab" data-tab="prepare" aria-selected="false" id="tabbtn-prepare">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Prepare
+        </button>
+      </nav>
+
+      <!-- LIVE -->
+      <section class="tab-panel active" id="tab-live" role="tabpanel" aria-labelledby="tabbtn-live">
+        <div class="controls">
+          <label class="field">
+            <span>Time window</span>
+            <select id="windowSelect">
+              <option value="hour">Past hour</option>
+              <option value="day">Past 24 hrs</option>
+              <option value="week">7 days · M2.5+</option>
+              <option value="month">30 days · M4.5+</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Min magnitude</span>
+            <select id="magSelect">
+              <option value="0">All</option>
+              <option value="1">1.0+</option>
+              <option value="2.5">2.5+</option>
+              <option value="4.5">4.5+</option>
+              <option value="6">6.0+</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Sort</span>
+            <select id="sortSelect">
+              <option value="newest">Newest</option>
+              <option value="largest">Largest</option>
+              <option value="nearest">Nearest to home</option>
+            </select>
+          </label>
+          <label class="field field-wide">
+            <span>Filter by place</span>
+            <input type="search" id="searchInput" placeholder="e.g. Alaska, Japan, CA">
+          </label>
+        </div>
+
+        <div class="timeline-card">
+          <div class="timeline-head">
+            <span>Activity · last 24 hours</span>
+            <span class="muted" id="timelineMeta"></span>
+          </div>
+          <svg id="timeline" class="timeline" viewBox="0 0 240 48" preserveAspectRatio="none" role="img" aria-label="Earthquakes per hour over the last 24 hours"></svg>
+          <div class="timeline-axis"><span>24h ago</span><span>12h</span><span>now</span></div>
+        </div>
+
+        <div class="list-head">
+          <span id="listCount">Loading earthquakes…</span>
+        </div>
+        <ul class="quake-list" id="quakeList" aria-live="polite"></ul>
+      </section>
+
+      <!-- ALERTS -->
+      <section class="tab-panel" id="tab-alerts" role="tabpanel" aria-labelledby="tabbtn-alerts" hidden>
+        <div class="panel-head">
+          <h2>Your alerts</h2>
+          <button type="button" class="link-btn" id="markReadBtn">Mark all read</button>
+        </div>
+        <p class="muted small">Earthquakes from the past 24 hours inside your home and saved-area radii, plus active National Weather Service alerts at those locations (US only).</p>
+        <div class="notify-row">
+          <label class="switch"><input type="checkbox" id="notifyToggle"><span></span></label>
+          <div>
+            <strong>Browser notifications</strong>
+            <div class="muted small" id="notifyStatus">Get a pop-up when something new happens while SafeGround is open.</div>
+          </div>
+        </div>
+        <ul class="alert-list" id="alertList"></ul>
+
+        <h3 class="section-title">Severe weather &amp; hazards · United States</h3>
+        <p class="muted small">Active Extreme and Severe NWS alerts nationwide.</p>
+        <ul class="alert-list compact" id="nwsList"></ul>
+      </section>
+
+      <!-- PLACES -->
+      <section class="tab-panel" id="tab-places" role="tabpanel" aria-labelledby="tabbtn-places" hidden>
+        <div class="panel-head"><h2>Home</h2></div>
+        <div class="place-card home-card" id="homeCard"></div>
+        <div class="btn-row">
+          <button type="button" class="btn" id="homeGeoBtn">Use my location</button>
+          <button type="button" class="btn" id="homePickBtn">Pick on map</button>
+        </div>
+        <form class="search-form" id="homeSearchForm" autocomplete="off">
+          <input type="search" id="homeSearch" placeholder="Search a city or address" aria-label="Search for home location">
+          <button type="submit" class="btn">Search</button>
+        </form>
+        <ul class="search-results" id="homeResults"></ul>
+
+        <div class="panel-head spaced">
+          <h2>Saved areas</h2>
+          <button type="button" class="btn btn-accent" id="addAreaBtn">+ Add area</button>
+        </div>
+
+        <form class="area-form" id="areaForm" hidden autocomplete="off">
+          <input type="hidden" id="areaId">
+          <label class="field field-wide"><span>Name</span><input id="areaName" required maxlength="40" placeholder="e.g. Mom’s house"></label>
+          <label class="field field-wide"><span>Location</span>
+            <div class="inline">
+              <input type="search" id="areaSearch" placeholder="Search a place">
+              <button type="button" class="btn" id="areaSearchBtn">Find</button>
+              <button type="button" class="btn" id="areaPickBtn">Pick on map</button>
+            </div>
+          </label>
+          <ul class="search-results" id="areaResults"></ul>
+          <div class="muted small" id="areaCoords">No location chosen yet.</div>
+          <label class="field"><span>Alert radius: <b id="areaRadiusLabel">250 km</b></span><input type="range" id="areaRadius" min="25" max="1500" step="25" value="250"></label>
+          <label class="field"><span>Alert at magnitude</span>
+            <select id="areaMinMag">
+              <option value="1">1.0+</option>
+              <option value="2.5" selected>2.5+</option>
+              <option value="3.5">3.5+</option>
+              <option value="4.5">4.5+</option>
+              <option value="6">6.0+</option>
+            </select>
+          </label>
+          <div class="btn-row">
+            <button type="submit" class="btn btn-accent" id="areaSave">Save area</button>
+            <button type="button" class="btn" id="areaCancel">Cancel</button>
+          </div>
+        </form>
+
+        <ul class="place-list" id="areaList"></ul>
+      </section>
+
+      <!-- PREPARE -->
+      <section class="tab-panel" id="tab-prepare" role="tabpanel" aria-labelledby="tabbtn-prepare" hidden>
+        <div class="prep-hero">
+          <svg viewBox="0 0 80 80" class="ring" aria-hidden="true">
+            <circle cx="40" cy="40" r="34" class="ring-track"/>
+            <circle cx="40" cy="40" r="34" class="ring-fill" id="prepRing"/>
+          </svg>
+          <div>
+            <div class="prep-pct" id="prepPct">0%</div>
+            <div class="muted small" id="prepCount">0 of 0 ready</div>
+          </div>
+        </div>
+
+        <div class="tip-grid">
+          <div class="tip"><b>Drop</b><span>to hands and knees</span></div>
+          <div class="tip"><b>Cover</b><span>head &amp; neck under a table</span></div>
+          <div class="tip"><b>Hold on</b><span>until shaking stops</span></div>
+        </div>
+
+        <div id="checklist"></div>
+
+        <form class="search-form" id="customItemForm" autocomplete="off">
+          <input id="customItem" placeholder="Add your own item…" maxlength="80" aria-label="Add a custom checklist item">
+          <button type="submit" class="btn btn-accent">Add</button>
+        </form>
+        <div class="btn-row">
+          <button type="button" class="btn" id="printChecklist">Print checklist</button>
+          <button type="button" class="btn btn-ghost" id="resetChecklist">Reset</button>
+        </div>
+        <p class="muted small">Based on Ready.gov and USGS earthquake-preparedness guidance.</p>
+      </section>
+
+      <footer class="panel-foot">
+        Data: <a href="https://earthquake.usgs.gov/earthquakes/feed/" target="_blank" rel="noopener">USGS</a> ·
+        <a href="https://www.weather.gov/documentation/services-web-api" target="_blank" rel="noopener">NOAA/NWS</a> ·
+        Map © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>, <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>.
+        Not an official warning system — always follow local authorities.
+      </footer>
+    </aside>
+  </main>
+
+  <div class="toasts" id="toasts" aria-live="assertive"></div>
+
+  <noscript><p class="noscript">SafeGround needs JavaScript to load live earthquake and weather data.</p></noscript>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/checklist.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

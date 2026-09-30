@@ -1,0 +1,17 @@
+{
+  "name": "safeground",
+  "version": "1.0.0",
+  "description": "SafeGround — live earthquake & disaster tracker (USGS + NOAA/NWS). Static site, no build step.",
+  "private": true,
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "test": "playwright test --project=chromium --project=mobile",
+    "test:headed": "playwright test --headed",
+    "test:live": "playwright test --project=live",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  },
+  "license": "MIT"
+}
