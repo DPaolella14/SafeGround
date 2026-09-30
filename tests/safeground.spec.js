@@ -302,3 +302,97 @@ test.describe('Preferences', () => {
     await expect(page.locator('#statNear')).toHaveText(/mi$/);
   });
 });
+
+test.describe('Map tiles', () => {
+  test('uses keyless Esri basemap tiles (no CARTO / API-key providers)', async ({ page }) => {
+    const ctl = await mockApis(page);
+    await openApp(page);
+    await expect(page.locator('.leaflet-tile-loaded').first()).toBeAttached();
+    expect(ctl.tileRequests.some((u) => u.includes('server.arcgisonline.com'))).toBeTruthy();
+    const html = await page.content();
+    expect(html).not.toContain('cartocdn');
+  });
+
+  test('map style switcher changes basemap and remembers it', async ({ page }) => {
+    const ctl = await mockApis(page);
+    await openApp(page);
+    await expect(page.locator('#basemapSwitch [data-basemap="dark"]')).toHaveAttribute('aria-checked', 'true');
+    ctl.tileRequests.length = 0;
+    await page.locator('#basemapSwitch [data-basemap="satellite"]').click();
+    await expect(page.locator('#basemapSwitch [data-basemap="satellite"]')).toHaveAttribute('aria-checked', 'true');
+    await expect.poll(() => ctl.tileRequests.some((u) => u.includes('World_Imagery'))).toBeTruthy();
+    await page.reload();
+    await page.locator('#liveStatus[data-state="live"]').waitFor();
+    await expect(page.locator('#basemapSwitch [data-basemap="satellite"]')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  test('falls back to OpenStreetMap if Esri tiles fail', async ({ page }) => {
+    const ctl = await mockApis(page, { esriStatus: 403 });
+    await openApp(page);
+    await expect(page.locator('.toast', { hasText: 'Switched map provider' })).toBeVisible();
+    expect(ctl.tileRequests.some((u) => u.includes('tile.openstreetmap.org'))).toBeTruthy();
+  });
+});
+
+test.describe('Guidance & navigation', () => {
+  test('first visit shows the welcome guide; "Set my home" jumps to Places', async ({ page }) => {
+    await mockApis(page, { firstVisit: true });
+    await page.goto('/');
+    const modal = page.locator('#welcome');
+    await expect(modal).toBeVisible();
+    await expect(modal).toContainText('Welcome to SafeGround');
+    await page.locator('#welcomeSetHome').click();
+    await expect(modal).toBeHidden();
+    await expect(page.locator('#tab-places')).toBeVisible();
+    await expect(page.locator('#homeSection')).toHaveClass(/highlight/);
+    // Not shown again after reload
+    await page.reload();
+    await page.locator('#liveStatus[data-state="live"]').waitFor();
+    await expect(modal).toBeHidden();
+  });
+
+  test('Help button reopens the guide; Escape closes it', async ({ page }) => {
+    await mockApis(page);
+    await openApp(page);
+    await expect(page.locator('#welcome')).toBeHidden();
+    await page.locator('#helpBtn').click();
+    await expect(page.locator('#welcome')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#welcome')).toBeHidden();
+  });
+
+  test('getting-started steps track progress and can be dismissed', async ({ page }) => {
+    await mockApis(page);
+    await openApp(page);
+    const card = page.locator('#setupCard');
+    await expect(card).toBeVisible();
+    await expect(page.locator('#setupProgress')).toHaveText('0 of 3 done');
+    await page.locator('[data-setup="home"]').click();
+    await expect(page.locator('#tab-places')).toBeVisible();
+    await page.locator('#homeSearch').fill('San Francisco');
+    await page.locator('#homeSearchForm button[type=submit]').click();
+    await page.locator('#homeResults button').first().click();
+    await page.locator('#tabbtn-live').click();
+    await expect(page.locator('#setupProgress')).toHaveText('1 of 3 done');
+    await page.locator('#setupDismiss').click();
+    await expect(card).toBeHidden();
+  });
+
+  test('summary cards on the map are shortcuts', async ({ page }) => {
+    await mockApis(page);
+    await openApp(page);
+    await page.locator('#statMaxBtn').click();
+    await expect(page.locator('#detail')).toContainText('Valparaíso');
+    await page.keyboard.press('Escape');
+    await page.locator('#statNearBtn').click(); // no home yet → goes to Places
+    await expect(page.locator('#tab-places')).toBeVisible();
+    await page.locator('#statNwsBtn').click();
+    await expect(page.locator('#tab-alerts')).toBeVisible();
+  });
+
+  test('header shows when the next update happens', async ({ page }) => {
+    await mockApis(page);
+    await openApp(page);
+    await expect(page.locator('#refreshLabel')).toHaveText(/Next update in \d+s/);
+  });
+});

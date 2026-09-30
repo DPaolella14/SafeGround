@@ -4,11 +4,18 @@
   const SG = (window.SG = window.SG || {});
   const { esc, fmtMag, magColor, magRadius, timeAgo, cssVar } = SG.util;
 
-  const TILES = {
-    dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+  // Basemaps that need NO API key. Esri's public ArcGIS Online tile services are the default
+  // (they also work when the page is opened straight from disk); OpenStreetMap is the automatic fallback.
+  const ESRI = (svc) => `https://server.arcgisonline.com/ArcGIS/rest/services/${svc}/MapServer/tile/{z}/{y}/{x}`;
+  const ESRI_ATTR = 'Tiles &copy; <a href="https://www.esri.com">Esri</a> — Esri, HERE, Garmin, USGS, NGA, EPA, NPS';
+  const BASEMAPS = {
+    dark: { label: 'Dark', layers: [{ url: ESRI('Canvas/World_Dark_Gray_Base'), max: 16 }, { url: ESRI('Canvas/World_Dark_Gray_Reference'), max: 16, overlay: true }] },
+    light: { label: 'Light', layers: [{ url: ESRI('Canvas/World_Light_Gray_Base'), max: 16 }, { url: ESRI('Canvas/World_Light_Gray_Reference'), max: 16, overlay: true }] },
+    streets: { label: 'Streets', layers: [{ url: ESRI('World_Street_Map'), max: 19 }] },
+    satellite: { label: 'Satellite', layers: [{ url: ESRI('World_Imagery'), max: 19 }, { url: ESRI('Reference/World_Boundaries_and_Places'), max: 19, overlay: true }] },
+    terrain: { label: 'Terrain', layers: [{ url: ESRI('World_Topo_Map'), max: 19 }] },
   };
-  const ATTRIB = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+  const OSM_FALLBACK = { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', max: 19, attr: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' };
 
   const SEV_VAR = { Extreme: '--sev-extreme', Severe: '--sev-severe', Moderate: '--sev-moderate', Minor: '--sev-minor' };
   const sevColor = (s) => cssVar(SEV_VAR[s] || '--sev-minor');
@@ -16,13 +23,13 @@
   const HOME_SVG = '<svg viewBox="0 0 24 24"><path d="M3 11 12 4l9 7v9h-6v-6H9v6H3z" fill="currentColor"/></svg>';
 
   let map = null;
-  let tileLayer = null;
   const layers = {};
   const quakeLayers = new Map();
   let clickHandler = null;
   let ready = false;
 
-  function init(el, { theme, onQuakeClick, onAlertClick }) {
+  function init(el, opts) {
+    const { theme, onQuakeClick, onAlertClick } = opts;
     if (typeof window.L === 'undefined') {
       el.innerHTML = '<div class="empty-state" style="padding-top:120px">Map library failed to load. The lists still work.</div>';
       return false;
@@ -38,7 +45,11 @@
     });
     L.control.zoom({ position: 'topright' }).addTo(map);
     L.control.scale({ position: 'bottomright', imperial: true }).addTo(map);
-    setTheme(theme);
+    map.createPane('labels');
+    map.getPane('labels').style.zIndex = 450; // above NWS polygons, below markers
+    map.getPane('labels').style.pointerEvents = 'none';
+    onFallback = opts.onFallback || null;
+    setBasemap(opts.basemap || (theme === 'light' ? 'light' : 'dark'));
 
     layers.nws = L.layerGroup().addTo(map);
     layers.areas = L.layerGroup().addTo(map);
@@ -56,16 +67,54 @@
     return true;
   }
 
-  function setTheme(theme) {
+  let baseGroup = null;
+  let currentBase = null;
+  let usingFallback = false;
+  let onFallback = null;
+
+  /** Switch the background map. `key` is one of BASEMAPS. */
+  function setBasemap(key) {
     if (!map) return;
-    if (tileLayer) map.removeLayer(tileLayer);
-    tileLayer = L.tileLayer(TILES[theme] || TILES.dark, {
-      attribution: ATTRIB,
-      subdomains: 'abcd',
-      maxZoom: 19,
-      detectRetina: false,
-    }).addTo(map);
+    if (!BASEMAPS[key]) key = 'dark';
+    currentBase = key;
+    if (baseGroup) map.removeLayer(baseGroup);
+    baseGroup = L.layerGroup();
+    if (usingFallback) {
+      L.tileLayer(OSM_FALLBACK.url, { attribution: OSM_FALLBACK.attr, maxZoom: 19, className: key === 'dark' ? 'tiles-dim' : '' }).addTo(baseGroup);
+    } else {
+      let loaded = 0;
+      let failed = 0;
+      BASEMAPS[key].layers.forEach((def, i) => {
+        const tl = L.tileLayer(def.url, {
+          attribution: i === 0 ? ESRI_ATTR : '',
+          maxNativeZoom: def.max,
+          maxZoom: 19,
+          pane: def.overlay ? 'labels' : 'tilePane',
+          crossOrigin: false,
+        });
+        if (i === 0) {
+          tl.on('tileload', () => { loaded++; });
+          tl.on('tileerror', () => {
+            failed++;
+            // Provider unreachable (blocked network, outage…) → fall back to OpenStreetMap once.
+            if (!usingFallback && loaded === 0 && failed >= 4) {
+              usingFallback = true;
+              setBasemap(currentBase);
+              if (onFallback) onFallback();
+            }
+          });
+        }
+        tl.addTo(baseGroup);
+      });
+    }
+    baseGroup.addTo(map);
+    el().dataset.basemap = key;
   }
+
+  function el() { return map.getContainer(); }
+
+  // Back-compat: theme switch maps onto dark/light basemaps.
+  function setTheme(theme) { setBasemap(theme === 'light' ? 'light' : 'dark'); }
 
   /** Draw quakes. `freshIds` get an animated ripple (newly arrived, or very recent). */
   function renderQuakes(quakes, { freshIds = new Set(), selectedId = null } = {}) {
@@ -187,8 +236,10 @@
   }
 
   SG.map = {
-    init, setTheme, renderQuakes, renderNws, renderPlaces, focusQuake, flyTo, fitRadius, fitGeometry, onPick, invalidate,
+    BASEMAPS, init, setTheme, setBasemap, renderQuakes, renderNws, renderPlaces, focusQuake, flyTo, fitRadius, fitGeometry, onPick, invalidate,
     get instance() { return map; },
     get ready() { return ready; },
+    get basemap() { return currentBase; },
+    get usingFallback() { return usingFallback; },
   };
 })();

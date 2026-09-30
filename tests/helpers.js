@@ -105,7 +105,19 @@ async function mockApis(page, opts = {}) {
     requests: [],
   };
 
-  await page.route(/basemaps\.cartocdn\.com/, (route) => route.fulfill({ status: 200, contentType: 'image/png', body: PNG }));
+  ctl.tileRequests = [];
+  ctl.esriStatus = opts.esriStatus || 200;
+  await page.route(/server\.arcgisonline\.com|tile\.openstreetmap\.org/, (route) => {
+    const url = route.request().url();
+    ctl.tileRequests.push(url);
+    if (url.includes('arcgisonline') && ctl.esriStatus !== 200) return route.fulfill({ status: ctl.esriStatus, body: '' });
+    return route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
+  });
+
+  // Skip the first-visit welcome guide unless a test asks for it.
+  if (!opts.firstVisit) {
+    await page.addInitScript(() => { try { localStorage.setItem('safeground:onboarded', 'true'); } catch (e) {} });
+  }
 
   await page.route(/earthquake\.usgs\.gov\/earthquakes\/feed/, (route) => {
     const url = route.request().url();

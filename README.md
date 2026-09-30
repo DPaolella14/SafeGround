@@ -14,7 +14,8 @@ It's a plain static website: no build step, no API keys, no backend.
 
 | | |
 |---|---|
-| **Live map** | Earthquakes sized and colored by magnitude. Recent and newly arrived quakes pulse. Severe/Extreme NWS alert areas are drawn as polygons. Dark and light basemaps. |
+| **Live map** | Earthquakes sized and colored by magnitude. Recent and newly arrived quakes pulse. Severe/Extreme NWS alert areas are drawn as polygons. Five map styles (Dark, Light, Streets, Satellite, Terrain), none of which needs an API key. A map key explains every symbol. |
+| **Guidance** | A welcome guide on first visit (reopen it any time with **Help**), a "Get set up" checklist, a short explanation at the top of every tab, and clickable summary cards on the map. |
 | **Auto-refresh** | USGS data refreshes every 60 s (the countdown ring is in the header) and NWS every 3 min. Background tabs pause and catch up when you come back. New quakes flash and get a **NEW** tag, and a toast appears for M5.5+ quakes worldwide. |
 | **Live tab** | Time window (hour / 24 h / 7 days / 30 days), magnitude filter, sort (newest / largest / nearest to home), place search, and a 24-hour activity chart. Click any quake for depth, felt reports, PAGER level, tsunami flag, distance from your places, and a link to the USGS event page. |
 | **Places** | Set your home by device location, search, or clicking the map. Add saved areas (family, work, trips), each with its own alert radius and magnitude threshold. |
@@ -27,7 +28,7 @@ It's a plain static website: no build step, no API keys, no backend.
 - USGS Earthquake Hazards Program GeoJSON feeds: `earthquake.usgs.gov/earthquakes/feed/v1.0/summary/`
 - NOAA / National Weather Service alerts API: `api.weather.gov/alerts/active`
 - OpenStreetMap Nominatim for place search. You can also type `lat, lon` directly.
-- Map: Leaflet 1.9.4 (bundled in `vendor/leaflet`), with CARTO basemap tiles showing © OpenStreetMap contributors data.
+- Map: Leaflet 1.9.4 (bundled in `vendor/leaflet`) with Esri ArcGIS Online basemap tiles, which need no key. If those can't load, SafeGround switches to OpenStreetMap tiles automatically.
 
 > SafeGround is not an official warning system. Always follow local authorities and official alerts.
 
@@ -52,7 +53,7 @@ index.html            page shell
 css/styles.css        all styling (dark/light, responsive, print)
 js/util.js            helpers: distance, formatting, colors, safe localStorage
 js/api.js             USGS / NWS / Nominatim clients
-js/map.js             Leaflet layers (quakes, pulses, NWS polygons, places)
+js/map.js             Leaflet layers (basemaps, quakes, pulses, NWS polygons, places)
 js/checklist.js       preparedness checklist
 js/app.js             state, refresh loop, alerts engine, UI
 vendor/leaflet/       Leaflet 1.9.4 (BSD-2-Clause)

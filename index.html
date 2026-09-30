@@ -34,9 +34,14 @@
         </svg>
         <span class="cd-text" id="countdownText">60</span>
       </button>
+      <span class="refresh-label" id="refreshLabel">Auto-updates every minute</span>
       <button class="chip-btn" id="unitsBtn" type="button" title="Toggle distance units">km</button>
       <button class="icon-btn" id="themeBtn" type="button" title="Toggle light/dark" aria-label="Toggle light or dark theme">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" fill="currentColor"/></svg>
+      </button>
+      <button class="help-btn" id="helpBtn" type="button" title="How to use SafeGround">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.3-2.7 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17.4" r="1.2" fill="currentColor"/></svg>
+        <span>Help</span>
       </button>
     </div>
   </header>
@@ -51,23 +56,41 @@
       <div id="map" aria-label="Map of earthquakes and alerts"></div>
 
       <div class="stats" id="stats">
-        <div class="stat"><span class="stat-label">Quakes · 24h</span><span class="stat-value" id="statCount">–</span><span class="stat-sub" id="statCountSub">&nbsp;</span></div>
-        <div class="stat"><span class="stat-label">Largest · 24h</span><span class="stat-value" id="statMax">–</span><span class="stat-sub" id="statMaxSub">&nbsp;</span></div>
-        <div class="stat"><span class="stat-label">Nearest to home</span><span class="stat-value" id="statNear">–</span><span class="stat-sub" id="statNearSub">Set a home location</span></div>
-        <div class="stat"><span class="stat-label">NWS alerts</span><span class="stat-value" id="statNws">–</span><span class="stat-sub" id="statNwsSub">&nbsp;</span></div>
+        <button type="button" class="stat" id="statCountBtn" title="Show the earthquake list"><span class="stat-label">Quakes · 24h</span><span class="stat-value" id="statCount">–</span><span class="stat-sub" id="statCountSub">&nbsp;</span></button>
+        <button type="button" class="stat" id="statMaxBtn" title="Show the largest earthquake"><span class="stat-label">Largest · 24h</span><span class="stat-value" id="statMax">–</span><span class="stat-sub" id="statMaxSub">&nbsp;</span></button>
+        <button type="button" class="stat" id="statNearBtn" title="Show the closest earthquake to your home"><span class="stat-label">Nearest to home</span><span class="stat-value" id="statNear">–</span><span class="stat-sub" id="statNearSub">Tap to set your home</span></button>
+        <button type="button" class="stat" id="statNwsBtn" title="Show weather &amp; hazard alerts"><span class="stat-label">Weather alerts</span><span class="stat-value" id="statNws">–</span><span class="stat-sub" id="statNwsSub">&nbsp;</span></button>
       </div>
 
-      <div class="legend" id="legend">
-        <div class="legend-title">Magnitude</div>
-        <div class="legend-row">
-          <span><i style="--c:var(--m1)"></i>&lt;2</span>
-          <span><i style="--c:var(--m2)"></i>2</span>
-          <span><i style="--c:var(--m3)"></i>3</span>
-          <span><i style="--c:var(--m4)"></i>4</span>
-          <span><i style="--c:var(--m5)"></i>5</span>
-          <span><i style="--c:var(--m6)"></i>6+</span>
+      <details class="legend" id="legend" open>
+        <summary>Map key</summary>
+        <div class="legend-body">
+          <div class="legend-title">Earthquake magnitude <span class="muted">(bigger circle = stronger)</span></div>
+          <div class="legend-row">
+            <span><i style="--c:var(--m1)"></i>&lt;2</span>
+            <span><i style="--c:var(--m2)"></i>2</span>
+            <span><i style="--c:var(--m3)"></i>3</span>
+            <span><i style="--c:var(--m4)"></i>4</span>
+            <span><i style="--c:var(--m5)"></i>5</span>
+            <span><i style="--c:var(--m6)"></i>6+</span>
+          </div>
+          <ul class="legend-list">
+            <li><span class="lg-pulse"></span>Pulsing = in the last hour</li>
+            <li><span class="lg-home"></span>Your home &amp; alert radius</li>
+            <li><span class="lg-area"></span>Saved area &amp; alert radius</li>
+            <li><span class="lg-nws"></span>Severe weather alert area</li>
+          </ul>
+          <label class="legend-toggle"><input type="checkbox" id="toggleNws" checked> Show weather alert areas</label>
         </div>
-        <label class="legend-toggle"><input type="checkbox" id="toggleNws" checked> NWS alert areas</label>
+      </details>
+
+      <div class="basemap-switch" id="basemapSwitch" role="radiogroup" aria-label="Map style">
+        <span class="bm-title">Map style</span>
+        <button type="button" data-basemap="dark" role="radio">Dark</button>
+        <button type="button" data-basemap="light" role="radio">Light</button>
+        <button type="button" data-basemap="streets" role="radio">Streets</button>
+        <button type="button" data-basemap="satellite" role="radio">Satellite</button>
+        <button type="button" data-basemap="terrain" role="radio">Terrain</button>
       </div>
 
       <div class="pick-banner" id="pickBanner" hidden>
@@ -80,22 +103,40 @@
 
     <aside class="panel" aria-label="SafeGround controls">
       <nav class="tabs" role="tablist">
-        <button role="tab" class="tab active" data-tab="live" aria-selected="true" id="tabbtn-live">
+        <button role="tab" class="tab active" data-tab="live" aria-selected="true" id="tabbtn-live" title="Live earthquake feed">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Live
         </button>
-        <button role="tab" class="tab" data-tab="alerts" aria-selected="false" id="tabbtn-alerts">
+        <button role="tab" class="tab" data-tab="alerts" aria-selected="false" id="tabbtn-alerts" title="Alerts for your places">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2Zm4 4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Alerts<span class="badge" id="alertBadge" hidden>0</span>
         </button>
-        <button role="tab" class="tab" data-tab="places" aria-selected="false" id="tabbtn-places">
+        <button role="tab" class="tab" data-tab="places" aria-selected="false" id="tabbtn-places" title="Your home and saved areas">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="2.5" fill="currentColor"/></svg>Places
         </button>
-        <button role="tab" class="tab" data-tab="prepare" aria-selected="false" id="tabbtn-prepare">
+        <button role="tab" class="tab" data-tab="prepare" aria-selected="false" id="tabbtn-prepare" title="Preparedness checklist">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Prepare
         </button>
       </nav>
 
       <!-- LIVE -->
       <section class="tab-panel active" id="tab-live" role="tabpanel" aria-labelledby="tabbtn-live">
+        <div class="setup-card" id="setupCard" hidden>
+          <div class="setup-head">
+            <div>
+              <div class="setup-title">Get set up</div>
+              <div class="muted small" id="setupProgress">0 of 3 done</div>
+            </div>
+            <button type="button" class="setup-dismiss" id="setupDismiss" aria-label="Hide getting-started steps" title="Hide">×</button>
+          </div>
+          <ol class="setup-steps" id="setupSteps"></ol>
+        </div>
+
+        <div class="panel-intro">
+          <h2>Live earthquakes</h2>
+          <p>Every earthquake reported by the USGS, updated each minute. <b>Click one</b> to see it on the map.</p>
+        </div>
+
+        <details class="filters" id="filters" open>
+          <summary>Filters &amp; sorting</summary>
         <div class="controls">
           <label class="field">
             <span>Time window</span>
@@ -129,6 +170,7 @@
             <input type="search" id="searchInput" placeholder="e.g. Alaska, Japan, CA">
           </label>
         </div>
+        </details>
 
         <div class="timeline-card">
           <div class="timeline-head">
@@ -147,11 +189,13 @@
 
       <!-- ALERTS -->
       <section class="tab-panel" id="tab-alerts" role="tabpanel" aria-labelledby="tabbtn-alerts" hidden>
-        <div class="panel-head">
-          <h2>Your alerts</h2>
-          <button type="button" class="link-btn" id="markReadBtn">Mark all read</button>
+        <div class="panel-intro">
+          <div class="panel-head">
+            <h2>Your alerts</h2>
+            <button type="button" class="link-btn" id="markReadBtn">Mark all read</button>
+          </div>
+          <p>Earthquakes in the last 24 hours <b>inside the circles</b> around your home and saved areas, plus active National Weather Service alerts there (US only). Click an alert for details.</p>
         </div>
-        <p class="muted small">Earthquakes from the past 24 hours inside your home and saved-area radii, plus active National Weather Service alerts at those locations (US only).</p>
         <div class="notify-row">
           <label class="switch"><input type="checkbox" id="notifyToggle"><span></span></label>
           <div>
@@ -168,7 +212,12 @@
 
       <!-- PLACES -->
       <section class="tab-panel" id="tab-places" role="tabpanel" aria-labelledby="tabbtn-places" hidden>
-        <div class="panel-head"><h2>Home</h2></div>
+        <div class="panel-intro">
+          <h2>Your places</h2>
+          <p>Set your <b>home</b> and add <b>saved areas</b> (family, work, a trip). Each gets a circle on the map; you’re alerted about earthquakes inside it.</p>
+        </div>
+        <div class="section-block" id="homeSection">
+        <h3 class="block-title"><span class="step-num">1</span>Home</h3>
         <div class="place-card home-card" id="homeCard"></div>
         <div class="btn-row">
           <button type="button" class="btn" id="homeGeoBtn">Use my location</button>
@@ -179,9 +228,11 @@
           <button type="submit" class="btn">Search</button>
         </form>
         <ul class="search-results" id="homeResults"></ul>
+        </div>
 
-        <div class="panel-head spaced">
-          <h2>Saved areas</h2>
+        <div class="section-block" id="areasSection">
+        <div class="panel-head">
+          <h3 class="block-title"><span class="step-num">2</span>Saved areas</h3>
           <button type="button" class="btn btn-accent" id="addAreaBtn">+ Add area</button>
         </div>
 
@@ -214,10 +265,15 @@
         </form>
 
         <ul class="place-list" id="areaList"></ul>
+        </div>
       </section>
 
       <!-- PREPARE -->
       <section class="tab-panel" id="tab-prepare" role="tabpanel" aria-labelledby="tabbtn-prepare" hidden>
+        <div class="panel-intro">
+          <h2>Be prepared</h2>
+          <p>Tick off your emergency kit and plan. Progress is saved on this device.</p>
+        </div>
         <div class="prep-hero">
           <svg viewBox="0 0 80 80" class="ring" aria-hidden="true">
             <circle cx="40" cy="40" r="34" class="ring-track"/>
@@ -251,13 +307,50 @@
       <footer class="panel-foot">
         Data: <a href="https://earthquake.usgs.gov/earthquakes/feed/" target="_blank" rel="noopener">USGS</a> ·
         <a href="https://www.weather.gov/documentation/services-web-api" target="_blank" rel="noopener">NOAA/NWS</a> ·
-        Map © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>, <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>.
+        Map tiles © <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>.
         Not an official warning system — always follow local authorities.
       </footer>
     </aside>
   </main>
 
   <div class="toasts" id="toasts" aria-live="assertive"></div>
+
+  <div class="modal-backdrop" id="welcome" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
+      <button type="button" class="modal-close" id="welcomeClose" aria-label="Close">×</button>
+      <div class="modal-hero">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M16 3 4 8v7c0 7.2 5 12.6 12 14 7-1.4 12-6.8 12-14V8L16 3Z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+          <path d="M8 17h4l2-5 3 9 2-4h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <h2 id="welcomeTitle">Welcome to SafeGround</h2>
+        <p>Live earthquakes and weather alerts on one map, with alerts for the places you care about.</p>
+      </div>
+      <ol class="guide">
+        <li>
+          <span class="guide-icon"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <div><b>Live</b> Every earthquake from the USGS, updating each minute. Click one in the list or on the map for details.</div>
+        </li>
+        <li>
+          <span class="guide-icon"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="2.5" fill="currentColor"/></svg></span>
+          <div><b>Places</b> Set your home and saved areas. Each gets an alert circle on the map.</div>
+        </li>
+        <li>
+          <span class="guide-icon"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2Zm4 4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <div><b>Alerts</b> Quakes inside your circles and National Weather Service warnings, with optional pop-up notifications.</div>
+        </li>
+        <li>
+          <span class="guide-icon"><svg viewBox="0 0 24 24"><path d="m5 12 4 4 10-10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <div><b>Prepare</b> A checklist for your emergency kit and family plan.</div>
+        </li>
+      </ol>
+      <div class="modal-tip">Tip: the summary cards on the map are clickable, and the <b>Help</b> button (top right) reopens this guide.</div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-accent btn-lg" id="welcomeSetHome">Set my home location</button>
+        <button type="button" class="btn btn-lg" id="welcomeExplore">Explore the map first</button>
+      </div>
+    </div>
+  </div>
 
   <noscript><p class="noscript">SafeGround needs JavaScript to load live earthquake and weather data.</p></noscript>
 

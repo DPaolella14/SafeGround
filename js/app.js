@@ -16,7 +16,7 @@
 
   // ---- State ---------------------------------------------------------------
   const state = {
-    prefs: Object.assign({ window: 'day', minMag: '0', sort: 'newest', units: 'km', theme: 'dark', notify: false, showNws: true }, store.get('prefs', {})),
+    prefs: Object.assign({ window: 'day', minMag: '0', sort: 'newest', units: 'km', theme: 'dark', basemap: null, notify: false, showNws: true }, store.get('prefs', {})),
     home: store.get('home', null),
     areas: store.get('areas', []),
     read: new Set(store.get('read', [])),
@@ -306,7 +306,7 @@
       day.forEach((q) => { const d = distanceKm(h.lat, h.lon, q.lat, q.lon); if (d < bestD) { bestD = d; best = q; } });
       setStat('#statNear', fmtDist(bestD, state.prefs.units), `M${fmtMag(best.mag)} · ${best.place}`);
     } else {
-      setStat('#statNear', '–', h ? 'No data yet' : 'Set a home location');
+      setStat('#statNear', '–', h ? 'No data yet' : 'Tap to set your home');
     }
   }
 
@@ -486,6 +486,7 @@
     renderList();
     updateAlerts({ silentKinds: ['quake', 'nws'] });
     renderPlaces(); // refresh per-area alert counts
+    renderSetup();
     loadNws().catch(() => {});
   }
 
@@ -593,6 +594,10 @@
       p.hidden = !on;
       p.classList.toggle('active', on);
     });
+    if (window.matchMedia('(max-width: 760px)').matches) {
+      const tabs = $('.tabs');
+      if (tabs.getBoundingClientRect().top < 0 || tabs.getBoundingClientRect().top > window.innerHeight * 0.6) tabs.scrollIntoView({ behavior: 'smooth' });
+    }
   }
 
   function toast({ title, body = '', color, onClick, timeout = 8000 }) {
@@ -631,6 +636,7 @@
     }
     const left = state.nextQuakeAt ? Math.max(0, Math.ceil((state.nextQuakeAt - now) / 1000)) : QUAKE_REFRESH_S;
     $('#countdownText').textContent = state.loading ? '…' : String(left);
+    $('#refreshLabel').textContent = state.loading ? 'Updating now…' : `Next update in ${left}s`;
     const ring = $('#countdownRing');
     ring.style.strokeDasharray = RING_C.toFixed(2);
     ring.style.strokeDashoffset = (RING_C * (1 - left / QUAKE_REFRESH_S)).toFixed(2);
@@ -652,7 +658,58 @@
   function applyTheme() {
     document.documentElement.dataset.theme = state.prefs.theme;
     document.querySelector('meta[name="theme-color"]').setAttribute('content', state.prefs.theme === 'light' ? '#ffffff' : '#0b0f17');
-    SG.map.setTheme(state.prefs.theme);
+    const bm = state.prefs.basemap;
+    if (!bm || bm === 'dark' || bm === 'light') setBasemap(state.prefs.theme === 'light' ? 'light' : 'dark', !!bm);
+  }
+
+  function setBasemap(key, remember = true) {
+    SG.map.setBasemap(key);
+    if (remember) { state.prefs.basemap = key; savePrefs(); }
+    $$('#basemapSwitch button').forEach((b) => b.setAttribute('aria-checked', b.dataset.basemap === key ? 'true' : 'false'));
+  }
+
+  // ---- Guidance: welcome guide & getting-started steps ---------------------------------
+  let lastFocus = null;
+  function openWelcome() {
+    lastFocus = document.activeElement;
+    $('#welcome').hidden = false;
+    $('#welcomeSetHome').focus();
+  }
+  function closeWelcome() {
+    if ($('#welcome').hidden) return;
+    $('#welcome').hidden = true;
+    store.set('onboarded', true);
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+
+  function goToSection(tab, sectionId) {
+    switchTab(tab);
+    const sec = document.getElementById(sectionId);
+    if (!sec) return;
+    sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    sec.classList.remove('highlight');
+    void sec.offsetWidth;
+    sec.classList.add('highlight');
+    setTimeout(() => sec.classList.remove('highlight'), 3000);
+  }
+
+  function renderSetup() {
+    const card = $('#setupCard');
+    const prog = SG.checklist && SG.checklist.progress ? SG.checklist.progress() : { done: 0 };
+    const steps = [
+      { id: 'home', text: 'Set your home location', done: !!state.home, action: 'Set home' },
+      { id: 'area', text: 'Add a place you care about (optional)', done: state.areas.length > 0, action: 'Add area' },
+      { id: 'prep', text: 'Start your preparedness checklist', done: prog.done > 0, action: 'Open' },
+    ];
+    const done = steps.filter((x) => x.done).length;
+    if (store.get('setupDismissed', false) || done === steps.length) { card.hidden = true; return; }
+    card.hidden = false;
+    $('#setupProgress').textContent = `${done} of ${steps.length} done`;
+    $('#setupSteps').innerHTML = steps.map((st, i) => `<li class="${st.done ? 'done' : ''}">
+        <span class="dot">${st.done ? '✓' : i + 1}</span>
+        <span class="step-text">${esc(st.text)}</span>
+        ${st.done ? '' : `<button type="button" class="btn" data-setup="${st.id}">${esc(st.action)}</button>`}
+      </li>`).join('');
   }
 
   function rerenderAll() {
@@ -665,6 +722,45 @@
   // ---- Wiring ---------------------------------------------------------------------------
   function bind() {
     $$('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+
+    // Welcome guide
+    $('#helpBtn').addEventListener('click', openWelcome);
+    $('#welcomeClose').addEventListener('click', closeWelcome);
+    $('#welcomeExplore').addEventListener('click', closeWelcome);
+    $('#welcomeSetHome').addEventListener('click', () => { closeWelcome(); goToSection('places', 'homeSection'); });
+    $('#welcome').addEventListener('click', (e) => { if (e.target.id === 'welcome') closeWelcome(); });
+
+    // Getting-started steps
+    $('#setupDismiss').addEventListener('click', () => { store.set('setupDismissed', true); renderSetup(); });
+    $('#setupSteps').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-setup]');
+      if (!b) return;
+      if (b.dataset.setup === 'home') goToSection('places', 'homeSection');
+      else if (b.dataset.setup === 'area') { goToSection('places', 'areasSection'); openAreaForm(null); }
+      else switchTab('prepare');
+    });
+
+    // Summary cards on the map are shortcuts
+    $('#statCountBtn').addEventListener('click', () => { switchTab('live'); $('#quakeList').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+    $('#statMaxBtn').addEventListener('click', () => {
+      const max = state.dayQuakes.reduce((m, q) => ((q.mag || -9) > (m ? m.mag || -9 : -9) ? q : m), null);
+      if (max) { state.quakeById.set(max.id, max); selectQuake(max.id, { fly: true }); }
+    });
+    $('#statNearBtn').addEventListener('click', () => {
+      const h = state.home;
+      if (!h) { goToSection('places', 'homeSection'); return; }
+      let best = null; let bestD = Infinity;
+      state.dayQuakes.forEach((q) => { const d = distanceKm(h.lat, h.lon, q.lat, q.lon); if (d < bestD) { bestD = d; best = q; } });
+      if (best) selectQuake(best.id, { fly: true });
+    });
+    $('#statNwsBtn').addEventListener('click', () => switchTab('alerts'));
+
+    // Map style
+    $('#basemapSwitch').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-basemap]');
+      if (b) setBasemap(b.dataset.basemap);
+    });
+    if (window.matchMedia('(max-width: 760px)').matches) $('#legend').open = false;
     document.addEventListener('click', (e) => {
       const g = e.target.closest('[data-goto]');
       if (g) switchTab(g.dataset.goto);
@@ -723,7 +819,11 @@
       if (e.target.id === 'detailZoom' && state.selectedId) SG.map.focusQuake(state.selectedId, 8);
     });
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { if (state.pick) endPick(); else if (state.selectedId) closeDetail(); }
+      if (e.key === 'Escape') {
+        if (!$('#welcome').hidden) closeWelcome();
+        else if (state.pick) endPick();
+        else if (state.selectedId) closeDetail();
+      }
     });
 
     $('#toggleNws').checked = state.prefs.showNws;
@@ -860,6 +960,8 @@
     document.documentElement.dataset.theme = state.prefs.theme;
     SG.map.init($('#map'), {
       theme: state.prefs.theme,
+      basemap: state.prefs.basemap || (state.prefs.theme === 'light' ? 'light' : 'dark'),
+      onFallback: () => toast({ title: 'Switched map provider', body: 'The default map tiles didn’t load, so SafeGround is using OpenStreetMap instead.' }),
       onQuakeClick: (id) => selectQuake(id),
       onAlertClick: (id) => {
         switchTab('alerts');
@@ -868,8 +970,11 @@
       },
     });
     applyTheme();
+    if (state.prefs.basemap) setBasemap(state.prefs.basemap, false);
     bind();
-    SG.checklist.init();
+    SG.checklist.init({ onChange: () => renderSetup() });
+    renderSetup();
+    if (!store.get('onboarded', false)) openWelcome();
     renderPlaces();
     renderAlerts();
     renderNwsViews();
